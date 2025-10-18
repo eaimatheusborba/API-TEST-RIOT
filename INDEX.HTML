@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Partidas de the dragon #GOT</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      background-color: #0e0e10;
+      color: #fff;
+      font-family: "Poppins", sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #ff4d4d;
+      margin-bottom: 40px;
+    }
+
+    .match {
+      border-left: 5px solid #ff4d4d;
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 25px;
+      display: flex;
+      align-items: center;
+      gap: 30px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+      transition: background 0.3s ease, transform 0.2s ease;
+    }
+
+    .match:hover {
+      transform: translateY(-2px);
+    }
+
+    /* Fundo das partidas */
+    .match.win {
+      background: rgba(0, 255, 100, 0.15);
+      border-left-color: #00ff88;
+    }
+
+    .match.loss {
+      background: rgba(255, 80, 80, 0.15);
+      border-left-color: #ff4d4d;
+    }
+
+    /* Container dos ícones */
+    .champion {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      width: 90px;
+    }
+
+    .champion img {
+      border-radius: 10px;
+      object-fit: cover;
+    }
+
+    .champion .champion-icon {
+      width: 70px;
+      height: 70px;
+      margin-bottom: 8px;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+    }
+
+    .champion .role-icon {
+      width: 32px;
+      height: 32px;
+      background: rgba(0, 0, 0, 0.7);
+      border-radius: 50%;
+      padding: 4px;
+    }
+
+    .stats {
+      flex-grow: 1;
+    }
+
+    .stats p {
+      margin: 4px 0;
+      line-height: 1.4;
+    }
+
+    canvas {
+      margin-top: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 10px;
+      width: 100%;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Partidas de the dragon #GOT</h1>
+  <div id="matches"></div>
+
+  <script>
+    // ==== CONFIGURAÇÃO DA API ====
+    const API_KEY = "HERE API - API AQUI";
+    const SUMMONER_NAME = "the dragon";
+    const TAGLINE = "GOT";
+    const REGION = "americas";
+    const PLATFORM = "br1";
+
+    // ==== ÍCONES DAS FUNÇÕES (ROLES) ====
+    const roleIcons = {
+      "TOP": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-top.svg",
+      "JUNGLE": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-jungle.svg",
+      "MIDDLE": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-middle.svg",
+      "BOTTOM": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-bottom.svg",
+      "UTILITY": "https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-utility.svg",
+      "NONE": "https://cdn-icons-png.flaticon.com/512/54/54463.png"
+    };
+
+    // ==== BUSCA O PUUID DO JOGADOR ====
+    async function getPUUID() {
+      const res = await fetch(
+        `https://${REGION}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(
+          SUMMONER_NAME
+        )}/${TAGLINE}?api_key=${API_KEY}`
+      );
+      const data = await res.json();
+      return data.puuid;
+    }
+
+    // ==== BUSCA LISTA DE PARTIDAS ====
+    async function getMatches(puuid) {
+      const res = await fetch(
+        `https://${REGION}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=5&api_key=${API_KEY}`
+      );
+      return res.json();
+    }
+
+    // ==== BUSCA DADOS DE UMA PARTIDA ====
+    async function getMatchInfo(matchId) {
+      const res = await fetch(
+        `https://${REGION}.api.riotgames.com/lol/match/v5/matches/${matchId}?api_key=${API_KEY}`
+      );
+      return res.json();
+    }
+
+    // ==== GRÁFICO DE DESEMPENHO ====
+    function renderMatchChart(canvasId, playerStats) {
+      const ctx = document.getElementById(canvasId);
+      new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: ["Kills", "Deaths", "Assists", "Farm", "Dano"],
+          datasets: [
+            {
+              label: "Desempenho",
+              data: [
+                playerStats.kills,
+                playerStats.deaths,
+                playerStats.assists,
+                playerStats.totalMinionsKilled + playerStats.neutralMinionsKilled,
+                playerStats.totalDamageDealtToChampions,
+              ],
+              backgroundColor: [
+                "rgba(75,192,192,0.7)",
+                "rgba(255,99,132,0.7)",
+                "rgba(153,102,255,0.7)",
+                "rgba(255,206,86,0.7)",
+                "rgba(54,162,235,0.7)",
+              ],
+            },
+          ],
+        },
+        options: {
+          scales: {
+            y: { beginAtZero: true },
+          },
+          plugins: { legend: { display: false } },
+        },
+      });
+    }
+
+    // ==== MOSTRA AS PARTIDAS ====
+    async function showMatches() {
+      const puuid = await getPUUID();
+      const matchIds = await getMatches(puuid);
+
+      const container = document.getElementById("matches");
+      container.innerHTML = "";
+
+      for (const matchId of matchIds) {
+        const match = await getMatchInfo(matchId);
+        const player = match.info.participants.find(p => p.puuid === puuid);
+
+        const farmTotal = player.totalMinionsKilled + player.neutralMinionsKilled;
+        const minutes = match.info.gameDuration / 60;
+        const csPerMin = (farmTotal / minutes).toFixed(1);
+
+        const version = match.info.gameVersion.split(".");
+        const patch = `${version[0]}.${version[1]}.1`;
+
+        const championImg = `https://ddragon.leagueoflegends.com/cdn/${patch}/img/champion/${player.championName}.png`;
+        const roleImg = roleIcons[player.teamPosition] || roleIcons["NONE"];
+
+        const matchDiv = document.createElement("div");
+        matchDiv.className = `match ${player.win ? "win" : "loss"}`;
+
+        matchDiv.innerHTML = `
+          <div class="champion">
+            <img src="${championImg}" class="champion-icon" alt="${player.championName}">
+            <img src="${roleImg}" class="role-icon" alt="${player.teamPosition}">
+          </div>
+
+          <div class="stats">
+            <p><strong>${player.championName}</strong> — ${player.teamPosition}</p>
+            <p>${player.win ? "🏆 <b>Vitória</b>" : "💀 <b>Derrota</b>"}</p>
+            <p>KDA: ${player.kills}/${player.deaths}/${player.assists}</p>
+            <p>Farm: ${farmTotal} (${csPerMin}/min)</p>
+            <p>Dano: ${player.totalDamageDealtToChampions.toLocaleString("pt-BR")}</p>
+            <canvas id="chart-${matchId}" height="150"></canvas>
+          </div>
+        `;
+
+        container.appendChild(matchDiv);
+        renderMatchChart(`chart-${matchId}`, player);
+      }
+    }
+
+    showMatches();
+  </script>
+</body>
+</html>
